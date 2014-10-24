@@ -1,0 +1,136 @@
+----------------------------------------------------------------------
+--
+-- File:         CoupMto.mac
+-- Coding by:    Jun Li
+-- Date:         2014-10-24
+-- Email:        JunLi.Pub@live.com
+-- Description :  
+--  1. This pml macro used in Alstom Beijing Engineering Co. Ltd. only.
+--  2. This pml macro used to export the coupling mto from pdms.
+--  3. This macro calculate the coupings needed for the pipe line
+--     but not modeled in pdms.
+----------------------------------------------------------------------
+
+!MtoCoup = Array()
+!TempRow = Array()
+!MtoCoup.Clear()
+
+VAR !Branches coll all BRAN for CE
+Do !BranStr values !Branches
+    !TempRow.Clear()
+    
+    !Bran = !BranStr.Dbref()
+    !Pipe = !Bran.Owner
+    !Bore = !Bran.Hbore.real()
+
+    !SpecRef = !Bran.pspec
+    !Spec = !SpecRef.Name
+    !Spec = !Spec.substring(8,4)
+    
+    !coupNum = 0
+    !Tcode = ''
+    !coupNumStr = ''
+    !Leng = 0
+    !ExistsCoup = 0
+    
+    !Cutlen = 12000
+    !Weld = 'WELD'
+
+    if(!Spec Inset('GE11', 'GH11', 'SE04', 'TE04', 'TE05', 'TE24')) then
+        !Cutlen = 6000
+        !Weld = 'COUP'
+    endif
+    
+    if(!Bore LE 50) then
+        !Cutlen = 6000
+        !Weld = 'COUP'
+    endif
+    
+    -- if no couping needed then skip
+    if(!Weld NE 'COUP') then
+        skip
+    endif
+
+    -- Get the first spool length of the branch
+    !Leng = !Bran.mtcl
+    !PreCl = !Bran.mtcl
+    !Tcode = !!GetCoupTCode(!SpecRef.name, !Bore)
+    VAR !BranMembers coll all bran memb with (TYPE NE 'TUBI') for $!BranStr
+    do !BranMemb values !BranMembers
+        if(!BranMemb.dbref().type inset('ATTA','BEND','OLET')) then
+            !Leng = !Leng + !BranMemb.dbref().mtcl + !BranMemb.dbref().Fitlen
+        elseif(!BranMemb.dbref().type EQ 'COUP') and (!BranMemb.dbref().mtcl GT 10 ) and (!PreCl GT 10 ) then
+            !Leng = !Leng + !BranMemb.dbref().mtcl + !BranMemb.dbref().Fitlen
+            !ExistsCoup = !ExistsCoup + 1
+        else
+        -- begin calculate coupling, not including the last component
+            if(!Bore NE !BranMemb.dbref().LBore.Real()) then
+                !Bore = !BranMemb.dbref().LBore.Real()
+                !coupNum = !coupNum + !Leng / !Cutlen
+                !coupNum = !coupNum.int()
+                !coupNum = !coupNum - !ExistsCoup
+                if(!coupNum GT 0) then
+                    !coupNumStr = !coupNumStr + ' $!Tcode x $!coupNum'
+                endif
+                --$p $!Leng $!coupNum $!ExistsCoup $!BranMemb 
+                !coupNum = 0
+                !Tcode = !!GetCoupTCode(!SpecRef.name, !Bore)
+            else
+                !coupNum = !coupNum + !Leng / !Cutlen
+                !coupNum = !coupNum.int()
+                !coupNum = !coupNum - !ExistsCoup
+                --$p $!Leng $!coupNum $!ExistsCoup $!BranMemb 
+            endif
+
+            !Leng = !BranMemb.dbref().mtcl
+            !ExistsCoup = 0
+        endif
+        !PreCl = !BranMemb.dbref().mtcl
+    enddo
+    --including the last component
+    
+    if(!Leng GE !Cutlen) then
+        !coupNum = !coupNum + !Leng / !Cutlen
+        !coupNum = !coupNum.int()
+        !coupNum = !coupNum - !ExistsCoup
+    endif
+
+    if(!coupNum GT 0) then
+        !TempRow[1] = !pipe.namn
+        !TempRow[2] = !pipe.:POWBATCH
+        !TempRow[3] = '0'
+        !TempRow[4] = '0'
+        !TempRow[5] = !coupNum.string()
+        !TempRow[6] = !Tcode
+        !TempRow[7] = 'COUP'
+        !TempRow[8] = !Bran.Inth.string()
+        !TempRow[9] = !pipe.:POWENGSTAT
+        !TempRow[10] = !Bran.Temperature.string()
+        !MtoCoup.Append(!TempRow)
+    endif
+enddo
+
+
+-- Save to file
+!Filename = 'D:\09_Temp\Mto_Coup.txt'
+!Output = object FILE (!Filename)
+handle any
+    $p Open file $!Filename failed!
+endhandle
+!OutPut.Open('OVERWRITE')
+
+do !i from 1 to !MtoCoup.size()
+    --!Output.WriteFile('OVERWRITE', !MtoCoup[!i])
+    !tempStr = ''
+    do !j from 1 to !MtoCoup[!i].size()
+        !tempStr = !tempStr + !MtoCoup[!i][!j] + '	'
+    enddo
+    !OutPut.WriteRecord(!tempStr)
+    handle any
+        $p Write file $!Filename failed!
+    endhandle
+enddo
+
+!OutPut.Close()
+!Commandline = 'notepad '& !Filename & '&'
+syscom '$!Commandline'

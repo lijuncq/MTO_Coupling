@@ -1,0 +1,88 @@
+Define function !!CoupNum() is String
+    !coupNum = 0
+    PIPE
+    VAR !Brans COLL ALL BRAN FOR CE
+    
+    !Tcode = ''
+    !SpecRef = !!ce.pspec
+    !Spec = !!ce.pspec.Name
+    !Spec = !Spec.substring(8,4)
+    
+    !Cutlen = 12000
+    !Weld = 'WELD'
+    
+    if(!Spec Inset('GE11', 'GH11', 'SE04', 'TE04', 'TE05', 'TE24')) then
+        !Cutlen = 6000
+        !Weld = 'COUP'
+    endif
+    
+    if(!!CE.Hbore.real() LE 50) then
+        !Cutlen = 6000
+        !Weld = 'COUP'
+    endif
+
+    !coupNumStr = ''
+    
+    Do !Bran values !Brans
+    $!Bran
+        !Bore = !!CE.Hbore.real()
+        !Leng = 0
+        if(!Spec Inset('SE04', 'TE04', 'TE05', 'TE24')) then
+            if(!Bore GT 50) then
+                --$p $!Bore
+                return ''
+            endif
+        endif
+        
+        !Leng = !!CE.mtcl
+        !PreCl = !!CE.mtcl
+        !Tcode = !!GetCoupTCode(!SpecRef.name, !Bore)
+        !ExistsCoup = 0
+        VAR !BranMembers coll all bran memb with (TYPE NE 'TUBI') for ce
+        do !BranMemb values !BranMembers
+            if(!BranMemb.dbref().type inset('ATTA','BEND','OLET')) then
+                !Leng = !Leng + !BranMemb.dbref().mtcl + !BranMemb.dbref().Fitlen
+            elseif(!BranMemb.dbref().type EQ 'COUP') and (!BranMemb.dbref().mtcl GT 10 ) and (!PreCl GT 10 ) then
+                !Leng = !Leng + !BranMemb.dbref().mtcl + !BranMemb.dbref().Fitlen
+                !ExistsCoup = !ExistsCoup + 1
+            else
+            -- begin calculate coupling, not including the last component
+
+                if(!Bore NE !BranMemb.dbref().LBore.Real()) then
+                    !Bore = !BranMemb.dbref().LBore.Real()
+                    !coupNum = !coupNum + !Leng / !Cutlen
+                    !coupNum = !coupNum.int()
+                    !coupNum = !coupNum - !ExistsCoup
+                    if(!coupNum GT 0) then
+                        !coupNumStr = !coupNumStr + ' $!Tcode x $!coupNum'
+                    endif
+                    --$p $!Leng $!coupNum $!ExistsCoup $!BranMemb 
+                    !coupNum = 0
+                    !Tcode = !!GetCoupTCode(!SpecRef.name, !Bore)
+                else
+                    !coupNum = !coupNum + !Leng / !Cutlen
+                    !coupNum = !coupNum.int()
+                    !coupNum = !coupNum - !ExistsCoup
+                    --$p $!Leng $!coupNum $!ExistsCoup $!BranMemb 
+                endif
+
+                !Leng = !BranMemb.dbref().mtcl
+                !ExistsCoup = 0
+            endif
+            !PreCl = !BranMemb.dbref().mtcl
+        enddo
+        --including the last component
+        
+        if(!Leng GE !Cutlen) then
+            !coupNum = !coupNum + !Leng / !Cutlen
+            !coupNum = !coupNum.int()
+            !coupNum = !coupNum - !ExistsCoup
+        endif
+    enddo
+    if(!coupNum GT 0) then
+        !coupNumStr = !coupNumStr + '$!Tcode x $!coupNum'
+        --$p $!Leng $!coupNum $!ExistsCoup 
+    endif
+    
+    return !coupNumStr.trim()
+endfunction

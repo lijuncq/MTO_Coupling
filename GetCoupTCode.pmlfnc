@@ -1,0 +1,64 @@
+----------------------------------------------------------------------
+--
+-- File:         GetCoupTCode.pmlfnc
+-- Coding by:    Jun Li
+-- Date:         2014-10-24
+-- Email:        JunLi.Pub@live.com
+-- Description :  
+--  1. This pml function used in Alstom Beijing Engineering Co. Ltd. only.
+--  2. This pml function used to get the techCode of the coupling in pdms.
+----------------------------------------------------------------------
+
+define function !!GetCoupTCode(!PSpec is string, !PBore is real) is string
+  
+    !SpecRef = !PSpec.Dbref()
+    !Spec = !SpecRef.Name
+    !Spec = !Spec.substring(8,4)
+    !Tcode = ''
+    !Styp = ''
+    
+    if(!Spec EQ 'SE04') then
+        !Styp = 'N P597'
+    elseif(!Spec Inset('TE04', 'TE05', 'TE24')) then
+        !Styp = 'N P507'
+    elseif(!Spec Inset('GE11', 'GH11')) then
+        !Styp = 'rigid'
+    else
+        !Styp = 'COSW'
+    endif
+    
+    !Types = !SpecRef.member
+    do !i from 1 to !Types.size()
+        if(!Types[!i].Type EQ 'SELE' ) and (!Types[!i].Tanswer EQ 'COUP') then
+            !Type = !Types[!i]
+            break
+        endif
+    enddo
+    
+    !Bores = !Type.member
+
+    do !i from 1 to !Bores.size()
+        if(!Bores[!i].Answer.real() EQ !PBore) then
+            !Bore = !Bores[!i]
+            break
+        endif
+    enddo
+    
+    !Spcos = !Bore.member
+    handle any
+        return ''
+    endhandle
+    --q var !Styp.lowcase()
+    do !i from 1 to !Spcos.size()
+        --q var !Spcos[!i].Tanswer.lowcase()
+        if(!Spcos[!i].Tanswer.upcase().substring(3,3) EQ !Styp.upcase().substring(3,3)) then
+            !Spco = !Spcos[!i]
+            break
+        endif
+    enddo
+    !Tcode = !Spco.:POWTECHNO
+    --!TempStr = !Tcode + '|' + !Spco.Dtxr
+    
+    --!!JTemp.Append(!TempStr)
+    return !Tcode
+endfunction
